@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Rotación</title>
+    <!-- Firebase SDK (compat - funciona directo en HTML sin bundler) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <style>
+        :root {
+            --bg-base: #0f0f0f;
+            --bg-panel: #1a1a1a;
+            --bg-card: #222;
+            --bg-hover: #2a2a2a;
+            --border: #333;
+            --text-primary: #e8e8e8;
+            --text-secondary: #a0a0a0;
+            --accent-blue: #2a5298;
+            --accent-green: #2d8a4e;
+            --accent-purple: #5a3a9a;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg-base);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 25px; }
+        .header h1 { font-size: 1.9em; color: #c0d8f0; }
+        .header p { color: var(--text-secondary); margin-top: 6px; font-size: 14px; }
+
+        /* TABS */
+        .tabs {
+            display: flex; gap: 4px; margin-bottom: 20px;
+            background: var(--bg-panel); padding: 6px;
+            border-radius: 12px; border: 1px solid var(--border);
+        }
+        .tab {
+            flex: 1; padding: 11px; border: none; border-radius: 8px;
+            cursor: pointer; font-weight: bold; font-size: 14px;
+            transition: all 0.2s; background: transparent; color: var(--text-secondary);
+        }
+        .tab.active { background: #1e3a5f; color: #8ab4e8; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* PANEL */
+        .panel {
+            background: var(--bg-panel); border-radius: 12px;
+            padding: 20px; border: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+        .panel-title {
+            font-size: 14px; font-weight: bold; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        /* FORMULARIOS */
+        .form-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 120px; }
+        .form-group label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-control {
+            padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px;
+            font-size: 14px; background: var(--bg-card); color: var(--text-primary);
+            transition: border-color 0.2s; width: 100%;
+        }
+        .form-control:focus { outline: none; border-color: var(--accent-blue); }
+
+        /* BOTONES */
+        .btn {
+            padding: 10px 18px; border: none; border-radius: 8px;
+            font-size: 14px; font-weight: bold; cursor: pointer;
+            transition: all 0.2s; white-space: nowrap;
+        }
+        .btn-blue { background: #1e3a5f; color: #8ab4e8; border: 1px solid #2a5298; }
+        .btn-blue:hover { background: #2a4a7f; }
+        .btn-green { background: #1a3d28; color: #a0e0b8; border: 1px solid #2d8a4e; }
+        .btn-green:hover { background: #1f4d30; }
+        .btn-purple { background: #2a1a4a; color: #c0a8f0; border: 1px solid #5a3a9a; }
+        .btn-purple:hover { background: #3a2a5a; }
+        .btn-red { background: #3a0f0f; color: #e08080; border: 1px solid #6a1a1a; font-size: 12px; padding: 6px 10px; }
+        .btn-red:hover { background: #5a1a1a; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+        /* TABLA DE PERSONAS */
+        .tabla-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th {
+            background: #1e1e1e; color: var(--text-secondary); padding: 10px 12px;
+            text-align: left; font-size: 12px; text-transform: uppercase;
+            letter-spacing: 0.5px; border-bottom: 2px solid var(--border);
+        }
+        td { padding: 10px 12px; border-bottom: 1px solid #2a2a2a; vertical-align: middle; }
+        tr:hover td { background: var(--bg-hover); }
+        tr:last-child td { border-bottom: none; }
+
+        .badge-tarea {
+            display: inline-block; padding: 3px 10px; border-radius: 20px;
+            font-size: 12px; font-weight: bold;
+        }
+        .badge-1 { background: #1a2a4a; color: #80b0e8; }
+        .badge-2 { background: #1a3a2a; color: #80d0a0; }
+        .badge-3 { background: #3a2a1a; color: #e0b080; }
+        .badge-4 { background: #3a1a3a; color: #e080e0; }
+        .badge-none { background: #2a2a2a; color: #666; }
+
+        .fecha-asig { font-size: 12px; color: var(--text-secondary); }
+        .sin-asig { font-size: 12px; color: #555; font-style: italic; }
+
+        /* MODAL */
+        .modal {
+            display: none; position: fixed; z-index: 1000;
+            left: 0; top: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+        }
+        .modal.open { display: flex; align-items: center; justify-content: center; }
+        .modal-box {
+            background: var(--bg-panel); border-radius: 14px; padding: 28px;
+            width: 90%; max-width: 420px; border: 1px solid var(--border);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+        }
+        .modal-title { font-size: 16px; font-weight: bold; color: #8ab4e8; margin-bottom: 20px; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-actions .btn { flex: 1; }
+
+        /* CANCIONES */
+        .cancion-item {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 12px; transition: background 0.2s;
+        }
+        .cancion-item:hover { background: var(--bg-hover); }
+        .cancion-nombre { font-weight: bold; font-size: 15px; }
+        .cancion-meta { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+        .cancion-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+
+        .fecha-badge {
+            background: #1a2a1a; color: #80c898; border: 1px solid #2d8a4e;
+            padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold;
+        }
+        .sin-fecha-badge {
+            background: #2a2a2a; color: #666;
+            padding: 4px 10px; border-radius: 20px; font-size: 12px;
+        }
+
+        /* EMPTY STATE */
+        .empty { text-align: center; padding: 40px 20px; color: #555; font-size: 14px; }
+
+        /* NOTIFICACIÓN */
+        .notif {
+            position: fixed; top: 20px; right: 20px; z-index: 9999;
+            padding: 12px 20px; border-radius: 8px; font-weight: bold;
+            font-size: 14px; transform: translateX(120%);
+            transition: transform 0.3s ease; pointer-events: none;
+        }
+        .notif.ok { background: #1a3d28; color: #a0e0b8; border: 1px solid #2d8a4e; }
+        .notif.err { background: #3a0f0f; color: #e08080; border: 1px solid #6a1a1a; }
+
+        @media (max-width: 600px) {
+            .form-row { flex-direction: column; }
+            .cancion-item { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🔄 Control de Rotación</h1>
+        <p>Gestión de asignaciones de tareas y canciones</p>
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" onclick="cambiarTab('tareas', this)">📋 MENSAJES</button>
+        <button class="tab" onclick="cambiarTab('canciones', this)">🎵 HIMNOS</button>
+    </div>
+
+    <!-- ══════════════ TAB TAREAS ══════════════ -->
+    <div id="tab-tareas" class="tab-content active">
+
+        <!-- Agregar persona -->
+        <div class="panel">
+            <div class="panel-title">➕ Agregar Persona</div>
+            <div class="form-row">
+                <div class="form-group" style="flex:2;">
+                    <label>Nombre</label>
+                    <input type="text" class="form-control" id="pNombre" placeholder="Nombre completo">
+                </div>
+                <div class="form-group">
+                    <label>Fecha de Nacimiento</label>
+                    <input type="date" class="form-control" id="pFechaNacimiento">
+                </div>
+                <div class="form-group">
+                    <label>Fecha de Bautismo</label>
+                    <input type="date" class="form-control" id="pFechaIngreso">
+                </div>
+                <div class="form-group" style="justify-content:flex-end;">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-blue" onclick="agregarPersona()">➕ Agregar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Importar desde Excel -->
+        <div class="panel">
+            <div class="panel-title">📊 Importar desde Excel</div>
+            <div style="background:#1a1a2e; border:1px solid #3a3a6a; border-radius:8px; padding:12px 16px; margin-bottom:14px; font-size:13px; color:#a0a0d0; line-height:1.6;">
+                📋 <strong>Formato esperado:</strong> La planilla debe tener las columnas en este orden:<br>
+                <strong style="color:#c0b8f0;">Columna A: Nombre &nbsp;|&nbsp; Columna B: Fecha de Nacimiento &nbsp;|&nbsp; Columna C: Fecha de Bautismo (opcional)</strong><br>
+                Las columnas B y C deben contener fechas en formato <strong>DD/MM/YYYY</strong> o <strong>YYYY-MM-DD</strong>, o como fechas nativas de Excel. La columna C puede omitirse.<br>
+                La primera fila puede ser encabezado (se detecta automáticamente).
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <label style="background:#1e3a5f; border:1px solid #2a5298; color:#8ab4e8; padding:10px 18px; border-radius:8px; cursor:pointer; font-size:14px; font-weight:bold;">
+                    📂 Seleccionar archivo Excel (.xlsx / .xls)
+                    <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarExcel(this)">
+                </label>
+                <span id="excelStatus" style="font-size:13px; color:#666;"></span>
+            </div>
+        </div>
+
+        <!-- Lista de personas -->
+        <div class="panel">
+            <div class="panel-title">
+                <span>Lista de Personas</span>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span id="contPersonas" style="font-size:12px; color:#555;">0 personas</span>
+                    <button class="btn btn-sm" id="btnOrdenar" onclick="toggleOrden()" style="background:#1e2a3a; color:#8ab4e8; border:1px solid #2a5298; font-size:12px; padding:5px 12px;">
+                        📅 Más recientes primero
+                    </button>
+                </div>
+            </div>
+            <div class="tabla-container">
+                <table id="tablaPersonas">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Fecha de Nacimiento</th>
+                            <th>Edad</th>
+                            <th>Bautismo</th>
+                            <th>Última Tarea</th>
+                            <th>Fecha Asignación</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyPersonas">
+                        <tr><td colspan="7" class="empty">No hay personas registradas</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════ TAB CANCIONES ══════════════ -->
+    <div id="tab-canciones" class="tab-content">
+
+        <!-- Agregar canción -->
+        <div class="panel">
+            <div class="panel-title">➕ Agregar Himno</div>
+            <div class="form-row">
+                <div class="form-group" style="flex:2;">
+                    <label>Título del Himno</label>
+                    <input type="text" class="form-control" id="cNombre" placeholder="Título del Himno">
+                </div>
+                <div class="form-group">
+                    <label>Nº</label>
+                    <input type="text" class="form-control" id="cArtista" placeholder="Nº">
+                </div>
+                <div class="form-group" style="justify-content:flex-end;">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-purple" onclick="agregarCancion()">➕ Agregar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lista de canciones -->
+        <div class="panel">
+            <div class="panel-title">
+                <span>Lista de Himnos</span>
+                <span id="contCanciones" style="font-size:12px; color:#555;">0 canciones</span>
+            </div>
+            <div id="listaCanciones">
+                <div class="empty">No hay himnos registradas</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL ASIGNAR TAREA -->
+<div id="modalAsignar" class="modal">
+    <div class="modal-box">
+        <div class="modal-title">📋 Asignar Tarea</div>
+        <input type="hidden" id="modalPersonaId">
+        <div style="margin-bottom:14px; color:#a0a0a0; font-size:14px;">
+            Persona: <strong id="modalPersonaNombre" style="color:#e8e8e8;"></strong>
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+            <label>Selecciona la Tarea</label>
+            <select class="form-control" id="modalTarea">
+                <option value="">-- Selecciona una tarea --</option>
+                <option value="1">Primer mensaje</option>
+                <option value="2">Segundo Mensaje</option>
+                <option value="3">Tercer mensaje</option>
+                <option value="4">Cuarto mensaje</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+            <label>Fecha de Asignación</label>
+            <input type="date" class="form-control" id="modalFecha">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-red" onclick="cerrarModal('modalAsignar')">Cancelar</button>
+            <button class="btn btn-green" onclick="confirmarAsignacion()">✅ Confirmar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL ASIGNAR FECHA CANCIÓN -->
+<div id="modalCancion" class="modal">
+    <div class="modal-box">
+        <div class="modal-title">🎵 Registrar Uso de Canción</div>
+        <input type="hidden" id="modalCancionId">
+        <div style="margin-bottom:14px; color:#a0a0a0; font-size:14px;">
+            Canción: <strong id="modalCancionNombre" style="color:#e8e8e8;"></strong>
+        </div>
+        <div class="form-group">
+            <label>Fecha de Uso</label>
+            <input type="date" class="form-control" id="modalFechaCancion">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-red" onclick="cerrarModal('modalCancion')">Cancelar</button>
+            <button class="btn btn-purple" onclick="confirmarFechaCancion()">✅ Confirmar</button>
+        </div>
+    </div>
+</div>
+
+<!-- NOTIFICACIÓN -->
+<div class="notif" id="notif"></div>
+
+<!-- SheetJS para leer Excel -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+    // ── FIREBASE INIT ──────────────────────────────────────
+    const firebaseConfig = {
+        apiKey: "AIzaSyBovmpSei-JVHtN78UCnrnvIEkfpJnTSaM",
+        authDomain: "rotac-asignaciones.firebaseapp.com",
+        databaseURL: "https://rotac-asignaciones-default-rtdb.firebaseio.com",
+        projectId: "rotac-asignaciones",
+        storageBucket: "rotac-asignaciones.firebasestorage.app",
+        messagingSenderId: "1019084212993",
+        appId: "1:1019084212993:web:41a4cb40be79dd504b2900"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const refPersonas  = db.ref('personas');
+    const refCanciones = db.ref('canciones');
+
+    // ── DATOS EN MEMORIA ───────────────────────────────────
+    let personas  = [];
+    let canciones = [];
+
+    const TAREAS = {
+        '1': 'Primer mensaje',
+        '2': 'Segundo Mensaje',
+        '3': 'Tercer mensaje',
+        '4': 'Cuarto mensaje'
+    };
+
+    const BADGE_CLASS = { '1':'badge-1','2':'badge-2','3':'badge-3','4':'badge-4' };
+
+    // ── ORDEN ──────────────────────────────────────────────
+    let ordenAsignacion = 'reciente';
+
+    function toggleOrden() {
+        if (ordenAsignacion === 'ninguno')        ordenAsignacion = 'reciente';
+        else if (ordenAsignacion === 'reciente')  ordenAsignacion = 'antiguo';
+        else                                      ordenAsignacion = 'ninguno';
+
+        const btn = document.getElementById('btnOrdenar');
+        if (ordenAsignacion === 'reciente') {
+            btn.textContent = '📅 Más recientes primero';
+            btn.style.color = '#8ab4e8';
+            btn.style.borderColor = '#2a5298';
+        } else if (ordenAsignacion === 'antiguo') {
+            btn.textContent = '📅 Más antiguos primero';
+            btn.style.color = '#a0e0b8';
+            btn.style.borderColor = '#2d8a4e';
+        } else {
+            btn.textContent = '📅 Sin ordenar';
+            btn.style.color = '#a0a0a0';
+            btn.style.borderColor = '#444';
+        }
+        renderPersonas();
+    }
+
+    // ── ESCUCHAR CAMBIOS EN TIEMPO REAL ────────────────────
+    refPersonas.on('value', snapshot => {
+        const data = snapshot.val();
+        personas = data ? Object.values(data) : [];
+        renderPersonas();
+    });
+
+    refCanciones.on('value', snapshot => {
+        const data = snapshot.val();
+        canciones = data ? Object.values(data) : [];
+        renderCanciones();
+    });
+
+    // ── INIT ───────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        const hoy = new Date().toISOString().split('T')[0];
+        document.getElementById('pFechaIngreso').value = hoy;
+        document.getElementById('modalFecha').value    = hoy;
+        document.getElementById('modalFechaCancion').value = hoy;
+    });
+
+    // ── TABS ───────────────────────────────────────────────
+    function cambiarTab(tab, btn) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        btn.classList.add('active');
+    }
+
+    // ── PERSONAS ───────────────────────────────────────────
+    function agregarPersona() {
+        const nombre   = document.getElementById('pNombre').value.trim().toUpperCase();
+        const fechaNac = document.getElementById('pFechaNacimiento').value;
+        const fecha    = document.getElementById('pFechaIngreso').value;
+
+        if (!nombre)   return notif('err', '⚠️ Ingresa el nombre');
+        if (!fechaNac) return notif('err', '⚠️ Ingresa la fecha de nacimiento');
+        if (!fecha)    return notif('err', '⚠️ Ingresa la fecha de bautismo');
+
+        const nacDate = new Date(fechaNac + 'T12:00:00');
+        if (nacDate > new Date()) return notif('err', '⚠️ La fecha de nacimiento no puede ser futura');
+
+        const edadCalc = calcularEdad(fechaNac);
+        if (edadCalc < 1 || edadCalc > 120) return notif('err', '⚠️ La edad calculada está fuera del rango permitido (1–120)');
+
+        // Verificar duplicado en memoria
+        if (personas.some(p => p.nombre.toUpperCase().trim() === nombre)) {
+            return notif('err', '⚠️ Ya existe una persona con ese nombre');
+        }
+
+        const id = Date.now();
+        const persona = { id, nombre, fechaNacimiento: fechaNac, fechaIngreso: fecha, ultimaTarea: null, fechaAsignacion: null };
+
+        refPersonas.child(String(id)).set(persona)
+            .then(() => {
+                document.getElementById('pNombre').value = '';
+                document.getElementById('pFechaNacimiento').value = '';
+                notif('ok', '✅ Persona agregada');
+            })
+            .catch(() => notif('err', '❌ Error al guardar en la base de datos'));
+    }
+
+    function eliminarPersona(id) {
+        if (!confirm('¿Eliminar esta persona?')) return;
+        refPersonas.child(String(id)).remove()
+            .then(() => notif('ok', '✅ Persona eliminada'))
+            .catch(() => notif('err', '❌ Error al eliminar'));
+    }
+
+    function abrirModalAsignar(id) {
+        const p = personas.find(x => x.id === id);
+        if (!p) return;
+        document.getElementById('modalPersonaId').value = id;
+        document.getElementById('modalPersonaNombre').textContent = p.nombre;
+        document.getElementById('modalTarea').value = p.ultimaTarea || '';
+        document.getElementById('modalFecha').value = new Date().toISOString().split('T')[0];
+        document.getElementById('modalAsignar').classList.add('open');
+    }
+
+    function confirmarAsignacion() {
+        const id    = parseInt(document.getElementById('modalPersonaId').value);
+        const tarea = document.getElementById('modalTarea').value;
+        const fecha = document.getElementById('modalFecha').value;
+        if (!tarea) return notif('err', '⚠️ Selecciona una tarea');
+        if (!fecha) return notif('err', '⚠️ Selecciona una fecha');
+
+        refPersonas.child(String(id)).update({ ultimaTarea: tarea, fechaAsignacion: fecha })
+            .then(() => {
+                cerrarModal('modalAsignar');
+                const p = personas.find(x => x.id === id);
+                notif('ok', `✅ Tarea asignada a ${p ? p.nombre : ''}`);
+            })
+            .catch(() => notif('err', '❌ Error al guardar la asignación'));
+    }
+
+    function renderPersonas() {
+        const tbody = document.getElementById('tbodyPersonas');
+        document.getElementById('contPersonas').textContent = `${personas.length} persona(s)`;
+
+        if (personas.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">No hay personas registradas</td></tr>';
+            return;
+        }
+
+        let lista = [...personas];
+        if (ordenAsignacion === 'reciente') {
+            lista.sort((a, b) => {
+                if (!a.fechaAsignacion && !b.fechaAsignacion) return 0;
+                if (!a.fechaAsignacion) return 1;
+                if (!b.fechaAsignacion) return -1;
+                return b.fechaAsignacion.localeCompare(a.fechaAsignacion);
+            });
+        } else if (ordenAsignacion === 'antiguo') {
+            lista.sort((a, b) => {
+                if (!a.fechaAsignacion && !b.fechaAsignacion) return 0;
+                if (!a.fechaAsignacion) return 1;
+                if (!b.fechaAsignacion) return -1;
+                return a.fechaAsignacion.localeCompare(b.fechaAsignacion);
+            });
+        }
+
+        tbody.innerHTML = lista.map(p => {
+            const fechaNacDisplay = p.fechaNacimiento
+                ? new Date(p.fechaNacimiento + 'T12:00:00').toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric' })
+                : '—';
+            const edadDisplay  = p.fechaNacimiento ? calcularEdad(p.fechaNacimiento) + ' años' : '—';
+            const fechaIngreso  = p.fechaIngreso
+                ? new Date(p.fechaIngreso + 'T12:00:00').toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric' })
+                : '—';
+            const tareaHtml = p.ultimaTarea
+                ? `<span class="badge-tarea ${BADGE_CLASS[p.ultimaTarea]}">${TAREAS[p.ultimaTarea]}</span>`
+                : `<span class="badge-tarea badge-none">Sin asignar</span>`;
+            const fechaAsig = p.fechaAsignacion
+                ? `<span class="fecha-asig">${new Date(p.fechaAsignacion + 'T12:00:00').toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric' })}</span>`
+                : `<span class="sin-asig">—</span>`;
+            return `
+                <tr>
+                    <td><strong>${p.nombre}</strong></td>
+                    <td>${fechaNacDisplay}</td>
+                    <td>${edadDisplay}</td>
+                    <td>${fechaIngreso}</td>
+                    <td>${tareaHtml}</td>
+                    <td>${fechaAsig}</td>
+                    <td>
+                        <div style="display:flex; gap:6px;">
+                            <button class="btn btn-green btn-sm" onclick="abrirModalAsignar(${p.id})">📋 Asignar</button>
+                            <button class="btn btn-red" onclick="eliminarPersona(${p.id})">✕</button>
+                        </div>
+                    </td>
+                </tr>`;
+        }).join('');
+    }
+
+    // ── CANCIONES ──────────────────────────────────────────
+    function agregarCancion() {
+        const nombre  = document.getElementById('cNombre').value.trim();
+        const artista = document.getElementById('cArtista').value.trim();
+        if (!nombre) return notif('err', '⚠️ Ingresa el título del himno');
+
+        const id = Date.now();
+        refCanciones.child(String(id)).set({ id, nombre, artista, fechaUso: null })
+            .then(() => {
+                document.getElementById('cNombre').value = '';
+                document.getElementById('cArtista').value = '';
+                notif('ok', '✅ Himno agregado');
+            })
+            .catch(() => notif('err', '❌ Error al guardar'));
+    }
+
+    function eliminarCancion(id) {
+        if (!confirm('¿Eliminar este himno?')) return;
+        refCanciones.child(String(id)).remove()
+            .then(() => notif('ok', '✅ Himno eliminado'))
+            .catch(() => notif('err', '❌ Error al eliminar'));
+    }
+
+    function abrirModalCancion(id) {
+        const c = canciones.find(x => x.id === id);
+        if (!c) return;
+        document.getElementById('modalCancionId').value = id;
+        document.getElementById('modalCancionNombre').textContent = c.nombre;
+        document.getElementById('modalFechaCancion').value = new Date().toISOString().split('T')[0];
+        document.getElementById('modalCancion').classList.add('open');
+    }
+
+    function confirmarFechaCancion() {
+        const id    = parseInt(document.getElementById('modalCancionId').value);
+        const fecha = document.getElementById('modalFechaCancion').value;
+        if (!fecha) return notif('err', '⚠️ Selecciona una fecha');
+
+        refCanciones.child(String(id)).update({ fechaUso: fecha })
+            .then(() => {
+                cerrarModal('modalCancion');
+                const c = canciones.find(x => x.id === id);
+                notif('ok', `✅ Fecha registrada para "${c ? c.nombre : ''}"`);
+            })
+            .catch(() => notif('err', '❌ Error al guardar la fecha'));
+    }
+
+    function renderCanciones() {
+        const lista = document.getElementById('listaCanciones');
+        document.getElementById('contCanciones').textContent = `${canciones.length} himno(s)`;
+
+        if (canciones.length === 0) {
+            lista.innerHTML = '<div class="empty">No hay himnos registrados</div>';
+            return;
+        }
+
+        lista.innerHTML = canciones.map(c => {
+            const fechaHtml = c.fechaUso
+                ? `<span class="fecha-badge">📅 ${new Date(c.fechaUso + 'T12:00:00').toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric' })}</span>`
+                : `<span class="sin-fecha-badge">Sin usar</span>`;
+            return `
+                <div class="cancion-item">
+                    <div>
+                        <div class="cancion-nombre">🎵 ${c.nombre}</div>
+                        ${c.artista ? `<div class="cancion-meta">${c.artista}</div>` : ''}
+                    </div>
+                    <div class="cancion-actions">
+                        ${fechaHtml}
+                        <button class="btn btn-purple btn-sm" onclick="abrirModalCancion(${c.id})">📅 Fecha</button>
+                        <button class="btn btn-red" onclick="eliminarCancion(${c.id})">✕</button>
+                    </div>
+                </div>`;
+        }).join('');
+    }
+
+    // ── HELPERS ────────────────────────────────────────────
+    function calcularEdad(fechaNacimiento) {
+        const hoy = new Date();
+        const nac = new Date(fechaNacimiento + 'T12:00:00');
+        let edad = hoy.getFullYear() - nac.getFullYear();
+        const m = hoy.getMonth() - nac.getMonth();
+        if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+        return edad;
+    }
+
+    function cerrarModal(id) {
+        document.getElementById(id).classList.remove('open');
+    }
+
+    document.querySelectorAll('.modal').forEach(m => {
+        m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+    });
+
+    function notif(tipo, msg) {
+        const el = document.getElementById('notif');
+        el.className = `notif ${tipo}`;
+        el.textContent = msg;
+        el.style.transform = 'translateX(0)';
+        setTimeout(() => { el.style.transform = 'translateX(120%)'; }, 3000);
+    }
+
+    // ── IMPORTAR EXCEL ─────────────────────────────────────
+    function importarExcel(input) {
+        const archivo = input.files[0];
+        if (!archivo) return;
+
+        const statusEl = document.getElementById('excelStatus');
+        const ext = archivo.name.split('.').pop().toLowerCase();
+
+        if (!['xlsx', 'xls', 'csv'].includes(ext)) {
+            statusEl.textContent = '⚠️ Formato no soportado. Usa .xlsx, .xls o .csv';
+            statusEl.style.color = '#e08080';
+            input.value = '';
+            return;
+        }
+        if (archivo.size > 10 * 1024 * 1024) {
+            statusEl.textContent = '⚠️ El archivo es demasiado grande (máx. 10 MB)';
+            statusEl.style.color = '#e08080';
+            input.value = '';
+            return;
+        }
+
+        input.disabled = true;
+        statusEl.textContent = '⏳ Procesando archivo...';
+        statusEl.style.color = '#a0a0d0';
+
+        const reader = new FileReader();
+        reader.onerror = () => {
+            statusEl.textContent = '❌ No fue posible leer el archivo';
+            statusEl.style.color = '#e08080';
+            input.disabled = false;
+            input.value = '';
+        };
+
+        reader.onload = async (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const wb = XLSX.read(data, { type: 'array', cellDates: false });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                if (!ws) throw new Error('sin hoja');
+
+                const filas = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+                if (!filas || filas.length === 0) throw new Error('vacío');
+
+                // Detectar encabezado
+                let inicio = 0;
+                const pf = filas[0];
+                const colA0 = String(pf[0] ?? '').trim();
+                const colB0 = String(pf[1] ?? '').trim();
+                const esNum = v => v !== '' && !isNaN(v.replace(',', '.'));
+                if (colA0 && colB0 && !esNum(colA0) && !esNum(colB0)) inicio = 1;
+
+                const datosFila = filas.slice(inicio);
+                if (datosFila.length === 0) {
+                    statusEl.textContent = '⚠️ No se encontraron datos en el archivo';
+                    statusEl.style.color = '#e0b080';
+                    input.disabled = false;
+                    input.value = '';
+                    return;
+                }
+
+                function parsearFecha(val) {
+                    if (val === null || val === undefined || val === '') return null;
+                    if (typeof val === 'number') {
+                        const p = XLSX.SSF.parse_date_code(val);
+                        if (!p) return null;
+                        return `${p.y}-${String(p.m).padStart(2,'0')}-${String(p.d).padStart(2,'0')}`;
+                    }
+                    const s = String(val).trim();
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return isNaN(new Date(s+'T12:00:00')) ? null : s;
+                    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+                        const [d, m, y] = s.split('/');
+                        return isNaN(new Date(`${y}-${m}-${d}T12:00:00`)) ? null : `${y}-${m}-${d}`;
+                    }
+                    return null;
+                }
+
+                const hoy = new Date();
+                const nombresExistentes = new Set(personas.map(p => p.nombre.toUpperCase().trim()));
+                const nombresEnArchivo  = new Set();
+                const omitidas = { duplicado:0, nombreVacio:0, fechaNacInvalida:0, fechaNacFutura:0, edadFueraRango:0, fechaIngInvalida:0 };
+                const nuevas = [];
+
+                datosFila.forEach(fila => {
+                    const colA = String(fila[0] ?? '').trim();
+                    const colB = fila[1], colC = fila[2];
+                    const motivos = [];
+                    const nombre = colA.toUpperCase();
+                    if (!nombre) { motivos.push('nombreVacio'); }
+
+                    const fechaNac = parsearFecha(colB);
+                    if (!fechaNac) {
+                        motivos.push('fechaNacInvalida');
+                    } else {
+                        if (new Date(fechaNac + 'T12:00:00') > hoy) motivos.push('fechaNacFutura');
+                        else { const e = calcularEdad(fechaNac); if (e < 1 || e > 120) motivos.push('edadFueraRango'); }
+                    }
+
+                    const colCVacia = (colC === null || colC === undefined || String(colC).trim() === '');
+                    const fechaIng = parsearFecha(colC);
+                    if (!colCVacia && !fechaIng) motivos.push('fechaIngInvalida');
+
+                    if (motivos.length > 0) { motivos.forEach(m => omitidas[m]++); return; }
+                    if (nombresExistentes.has(nombre) || nombresEnArchivo.has(nombre)) { omitidas.duplicado++; return; }
+
+                    nombresEnArchivo.add(nombre);
+                    nuevas.push({ id: Date.now() + nuevas.length, nombre, fechaNacimiento: fechaNac, fechaIngreso: fechaIng || null, ultimaTarea: null, fechaAsignacion: null });
+                });
+
+                // Escribir en Firebase
+                if (nuevas.length > 0) {
+                    const updates = {};
+                    nuevas.forEach(p => { updates[String(p.id)] = p; });
+                    await refPersonas.update(updates);
+                }
+
+                const totalOmitidas = Object.values(omitidas).reduce((a,b) => a+b, 0);
+                let msg = '';
+                if (nuevas.length === 0 && totalOmitidas === 0) {
+                    msg = '⚠️ No se encontraron datos en el archivo';
+                    statusEl.style.color = '#e0b080';
+                } else if (nuevas.length === 0) {
+                    msg = '⚠️ No se importó ninguna persona';
+                    statusEl.style.color = '#e0b080';
+                } else {
+                    msg = `✅ ${nuevas.length} persona(s) importada(s)`;
+                    statusEl.style.color = '#a0e0b8';
+                    notif('ok', `✅ ${nuevas.length} persona(s) importada(s) desde "${archivo.name}"`);
+                }
+                if (totalOmitidas > 0) {
+                    const det = [
+                        omitidas.duplicado       ? `${omitidas.duplicado} duplicada(s)` : '',
+                        omitidas.nombreVacio     ? `${omitidas.nombreVacio} sin nombre` : '',
+                        omitidas.fechaNacInvalida? `${omitidas.fechaNacInvalida} con F.Nac inválida` : '',
+                        omitidas.fechaNacFutura  ? `${omitidas.fechaNacFutura} con F.Nac futura` : '',
+                        omitidas.edadFueraRango  ? `${omitidas.edadFueraRango} con edad fuera de rango` : '',
+                        omitidas.fechaIngInvalida? `${omitidas.fechaIngInvalida} con F.Bautismo inválida` : '',
+                    ].filter(Boolean).join(', ');
+                    msg += ` — ⚠️ ${totalOmitidas} omitida(s): ${det}`;
+                    if (nuevas.length === 0) statusEl.style.color = '#e0b080';
+                }
+                statusEl.textContent = msg;
+
+            } catch (err) {
+                statusEl.textContent = '❌ Error al procesar el archivo. Verifica que sea un Excel o CSV válido';
+                statusEl.style.color = '#e08080';
+            }
+            input.disabled = false;
+            input.value = '';
+        };
+        reader.readAsArrayBuffer(archivo);
+    }
+</script>
+
+</body>
+</html>
