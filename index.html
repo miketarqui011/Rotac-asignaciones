@@ -283,7 +283,15 @@
         <div class="panel">
             <div class="panel-title">
                 <span>Lista de Himnos</span>
-                <span id="contCanciones" style="font-size:12px; color:#555;">0 canciones</span>
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <span id="contCanciones" style="font-size:12px; color:#555;">0 canciones</span>
+                    <select id="ordenHimnos" onchange="renderCanciones()" style="background:#1e2a3a; color:#8ab4e8; border:1px solid #2a5298; border-radius:8px; padding:5px 10px; font-size:12px; font-weight:bold; cursor:pointer;">
+                        <option value="ninguno">📋 Sin ordenar</option>
+                        <option value="numero">🔢 Por número</option>
+                        <option value="alfabetico">🔤 Alfabético</option>
+                        <option value="fecha">📅 Por fecha</option>
+                    </select>
+                </div>
             </div>
             <div id="listaCanciones">
                 <div class="empty">No hay himnos registradas</div>
@@ -608,7 +616,28 @@
             return;
         }
 
-        lista.innerHTML = canciones.map(c => {
+        const orden = document.getElementById('ordenHimnos')?.value || 'ninguno';
+        let listaOrdenada = [...canciones];
+
+        if (orden === 'numero') {
+            // Ordenar por el campo artista (que contiene el Nº)
+            listaOrdenada.sort((a, b) => {
+                const nA = parseFloat(a.artista) || Infinity;
+                const nB = parseFloat(b.artista) || Infinity;
+                return nA - nB;
+            });
+        } else if (orden === 'alfabetico') {
+            listaOrdenada.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+        } else if (orden === 'fecha') {
+            listaOrdenada.sort((a, b) => {
+                if (!a.fechaUso && !b.fechaUso) return 0;
+                if (!a.fechaUso) return 1;
+                if (!b.fechaUso) return -1;
+                return b.fechaUso.localeCompare(a.fechaUso);
+            });
+        }
+
+        lista.innerHTML = listaOrdenada.map(c => {
             const fechaHtml = c.fechaUso
                 ? `<span class="fecha-badge">📅 ${new Date(c.fechaUso + 'T12:00:00').toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric' })}</span>`
                 : `<span class="sin-fecha-badge">Sin usar</span>`;
@@ -616,7 +645,7 @@
                 <div class="cancion-item">
                     <div>
                         <div class="cancion-nombre">🎵 ${c.nombre}</div>
-                        ${c.artista ? `<div class="cancion-meta">${c.artista}</div>` : ''}
+                        ${c.artista ? `<div class="cancion-meta">Nº ${c.artista}</div>` : ''}
                     </div>
                     <div class="cancion-actions">
                         ${fechaHtml}
